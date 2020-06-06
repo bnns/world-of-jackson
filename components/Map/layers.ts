@@ -1,5 +1,6 @@
 import type { IMapLayerParams } from '~/types/components/Map';
 import * as DeckGLLayers from "@deck.gl/layers";
+import ArrowPathLayer, {toAngle} from '../ArrowPath';
 const PolygonLayer: any = DeckGLLayers.PolygonLayer;
 const SolidPolygonLayer: any = DeckGLLayers.SolidPolygonLayer;
 const GeoJsonLayer: any = DeckGLLayers.GeoJsonLayer;
@@ -37,17 +38,18 @@ class CustomSolidPolygonLayer extends SolidPolygonLayer {
 
     this.state.attributeManager.addInstanced({
       instanceScaleOrigins: { size: 2, accessor: get_building_center }
-    });    
+    });
 
     this.state.attributeManager.add({
       scaleOrigins: { size: 2, accessor: get_building_center }
-    });    
+    });
 
     this.state.attributeManager.add({
       scaleFactor: { size: 1, accessor: "getScaleFactor"}
-    });    
+    });
 
   }
+
 }
 
 class CustomGeoJsonLayer extends GeoJsonLayer {
@@ -77,7 +79,6 @@ CustomGeoJsonLayer.defaultProps = {
 
 
 export function GetLayers(params: IMapLayerParams) {
-
   /// creates a dynamic polygon just big enough to cover all visible land area regardless of zoom level
   const size = Math.pow(2, (19 - params.zoom)) * .004
   const landCover = [
@@ -91,7 +92,44 @@ export function GetLayers(params: IMapLayerParams) {
     })
   }
 
+  const pathData = [
+    {
+      coordinates: [
+			  [-90.2099571, 32.3044686],
+			  [-90.2100170, 32.3044686],
+			  [-90.2100170, 32.3040226],
+			  [-90.2094470, 32.3040226],
+			  [-90.2094470, 32.3037944],
+        [-90.2093966, 32.3037944]
+      ],
+      name: 'Resource Flow',
+      color: [255, 255, 255]
+    }
+  ]
+
+/// creating layers for a base, and to input geojson(our map data)
   const layers = [
+      new ArrowPathLayer({
+        id: "arrow-paths",
+        data: pathData,
+        pickable: true,
+        widthScale: 1,
+        widthMinPixels: 1,
+        animateEvery: 1500,
+        getPath: (d: any) => d.coordinates,
+        getColor: (d: any) => d.color,
+        getWidth: () => 3,
+        getEnd: (d: any) => {
+          return d.coordinates && d.coordinates.length ? d.coordinates.slice(-1)[0] : [0, 0]
+        },
+        getRotation: (d: any) => {
+          if (!d.coordinates || d.coordinates.length < 2) {
+            return 0
+          }
+          const [[x0, y0], [x1, y1]] = d.coordinates.slice(-2);
+          return toAngle([x0, y0], [x1, y1]);
+        }
+      }),
       new PolygonLayer({ /// required for shadows to project onto
           id: "ground",
           data: landCover,
@@ -139,5 +177,6 @@ export function GetLayers(params: IMapLayerParams) {
           }
         })
   ];
+
   return layers
 }
