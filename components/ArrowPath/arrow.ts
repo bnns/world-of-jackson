@@ -1,6 +1,7 @@
 import {Layer} from '@deck.gl/core';
-// @ts-ignore
 import {Model, Geometry} from '@luma.gl/core';
+import vs from '~/shaders/arrow-vertex.glsl';
+import fs from '~/shaders/arrow-fragment.glsl';
 
 const defaultProps = {
   getEnd: {type: 'accessor', value: (x: any) => x.path && x.path.length ? x.path.slice(-1)[0] : [0, 0]},
@@ -10,47 +11,6 @@ const defaultProps = {
   widthUnits: 'pixels',
   widthScale: {type: 'number', value: 1, min: 0},
 };
-
-const vs = `
-attribute vec3 positions;
-attribute vec3 instancePositions;
-attribute vec3 instancePositions64Low;
-attribute float instanceWidths;
-attribute float instanceRotations;
-attribute vec4 instanceColors;
-
-uniform float widthScale;
-
-varying vec4 vColor;
-
-vec3 rotate_by_angle(vec3 vertex, float angle) {
-  float angle_radian = angle * PI / 180.0;
-  float cos_angle = cos(angle_radian);
-  float sin_angle = sin(angle_radian);
-  mat2 rotationMatrix = mat2(cos_angle, -sin_angle, sin_angle, cos_angle);
-  return vec3(rotationMatrix * vertex.xy, vertex.z);
-}
-
-void main(void) {
-  geometry.worldPosition = positions;
-  float widthPixels = project_size_to_pixel(instanceWidths * widthScale);
-  vec3 offsetCommon = positions * project_size(widthPixels);
-  vec3 positionCommon = project_position(instancePositions, instancePositions64Low);
-  vec3 rotatedOffsetCommon = rotate_by_angle(offsetCommon, instanceRotations);
-  gl_Position = project_common_position_to_clipspace(vec4(positionCommon + rotatedOffsetCommon, 0.0));
-  DECKGL_FILTER_GL_POSITION(gl_Position, geometry);
-
-  vColor = instanceColors;
-}`;
-
-const fs = `
-precision highp float;
-
-varying vec4 vColor;
-
-void main(void) {
-  gl_FragColor = vColor;
-}`
 
 class ArrowLayer extends Layer {
   constructor(props: any) {

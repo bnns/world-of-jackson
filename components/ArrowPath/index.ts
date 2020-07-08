@@ -1,8 +1,6 @@
 import {PathLayer} from '@deck.gl/layers';
 import {CompositeLayer} from '@deck.gl/core';
 import ArrowLayer from './arrow';
-// @ts-ignore
-import {Model, Geometry} from '@luma.gl/core';
 
 interface PathData {
   coordinates: number[][];
