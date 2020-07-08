@@ -116,6 +116,7 @@ export function GetLayers(params: IMapLayerParams) {
         widthScale: 1,
         widthMinPixels: 1,
         animateEvery: 1500,
+        // disableAnimation: true,
         getPath: (d: any) => d.coordinates,
         getColor: (d: any) => d.color,
         getWidth: () => 3,

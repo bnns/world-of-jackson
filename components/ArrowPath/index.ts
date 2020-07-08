@@ -77,7 +77,9 @@ const slicePath = (data: PathData, coeff: number): PathData => {
 const defaultProps = {
   ...PathLayer.defaultProps,
   ...ArrowLayer.defaultProps,
-  speed: .01
+  speed: .01,
+  animateEvery: null,
+  disableAnimation: false
 };
 
 const initialCoeff = 0.001;
@@ -97,10 +99,14 @@ class ArrowPathLayer extends CompositeLayer {
 
   initializeState() {
     super.initializeState()
-    const {data}: {data: PathData[]} = this.props;
+    const {data, disableAnimation}: {data: PathData[], disableAnimation: boolean} = this.props;
     const dataWithLengths = data.map(findLengths)
-    this.setState({coeff: initialCoeff, fullPathData: dataWithLengths, pathData: dataWithLengths.map(resetPath)})
-    this.animate()
+    if (disableAnimation) {
+      this.setState({coeff: 1, fullPathData: dataWithLengths, pathData: dataWithLengths})
+    } else {
+      this.setState({coeff: initialCoeff, fullPathData: dataWithLengths, pathData: dataWithLengths.map(resetPath)})
+      this.animate()
+    }
   }
 
   animate() {
