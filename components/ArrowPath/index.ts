@@ -1,13 +1,16 @@
-import {PathLayer} from '@deck.gl/layers';
+import {TripsLayer} from '@deck.gl/geo-layers';
 import {CompositeLayer} from '@deck.gl/core';
 import ArrowLayer from './arrow';
 
-interface PathData {
+interface Waypoint {
   coordinates: number[][];
+  timestamp: number;
+}
+
+interface PathData {
+  waypoints: Waypoint[];
   name: string;
   color: [number, number, number];
-  lengths: number[],
-  totalLength: number
 }
 
 export const toAngle = ([x0, y0]: [number, number], [x1, y1]: [number, number]) => {
@@ -22,67 +25,24 @@ export const toAngle = ([x0, y0]: [number, number], [x1, y1]: [number, number]) 
   }
 }
 
-const dist = ([x0, y0]: number[], [x1, y1]: number[]): number => Math.abs((x1 - x0)**2 + (y1 - y0)**2)
-
-const resetPath = ({coordinates, ...rest}: PathData): PathData => ({...rest, coordinates: coordinates.slice(0, 1)})
-
-interface DeterminateLength {
-  lengths: number[];
-  totalLength: number;
-}
-
-const findLengths = ({coordinates, ...rest}: PathData): PathData => {
-  const {lengths, totalLength} = coordinates.reduce<DeterminateLength>((acc, [x, y], idx, arr) => {
-    if (idx) {
-      const [x0, y0]: number[] = arr[idx-1];
-      const length = dist([x0, y0], [x, y])
-      return {lengths: acc.lengths.concat([length]), totalLength: acc.totalLength + length}
-    }
-    return acc
-  }, {lengths: [0], totalLength: 0})
-  return {...rest, coordinates, lengths, totalLength}
-}
-
-const stopAtLength = ([x0, y0]: number[], [x1, y1]: number[], fraction: number): number[] => {
-  return [x0 + (x1 - x0) * fraction, y0 + (y1 - y0) * fraction]
-}
-
-interface DeterminatePath {
-  remainingLength: number;
-  coordinates: number[][];
-}
-
-const slicePath = (data: PathData, coeff: number): PathData => {
-  const maxLength = coeff * data.totalLength;
-  const {coordinates} = data.coordinates.reduce<DeterminatePath>((acc, [x, y]: number[], idx: number, arr: number[][]) => {
-    if (!idx) {
-      return {...acc, coordinates: [[x, y]]} as DeterminatePath
-    }
-    if (acc.remainingLength <= 0) {
-      return acc
-    }
-    if (idx) {
-      if (data.lengths[idx] > acc.remainingLength) {
-        return {...acc, remainingLength: 0, coordinates: [...acc.coordinates, stopAtLength(arr[idx-1], [x, y], acc.remainingLength / data.lengths[idx])]}
-      }
-      return {...acc, remainingLength: acc.remainingLength - data.lengths[idx], coordinates: [...acc.coordinates, [x, y]]}
-    }
-    return acc
-  }, {remainingLength: maxLength, coordinates: []})
-
-  return {...data, coordinates}
-}
-
-
 const defaultProps = {
-  ...PathLayer.defaultProps,
+  ...TripsLayer.defaultProps,
   ...ArrowLayer.defaultProps,
-  speed: .01,
-  animateEvery: null,
-  disableAnimation: false
+  loopEvery: 3000,
+  disableAnimation: false,
+  trailLength: 3000,
+  opacity: 1
 };
 
-const initialCoeff = 0.001;
+const FRAME_INTERVAL = 1000 / 60;
+
+const truncateWaypoints = (time: number) => (pathData: PathData) => {
+  // TODO: implement
+  if (!time || !pathData) {
+    return []
+  }
+  return []
+}
 
 class ArrowPathLayer extends CompositeLayer {
   constructor(props: any) {
@@ -99,69 +59,57 @@ class ArrowPathLayer extends CompositeLayer {
 
   initializeState() {
     super.initializeState()
-    const {data, disableAnimation}: {data: PathData[], disableAnimation: boolean} = this.props;
-    const dataWithLengths = data.map(findLengths)
-    if (disableAnimation) {
-      this.setState({coeff: 1, fullPathData: dataWithLengths, pathData: dataWithLengths})
-    } else {
-      this.setState({coeff: initialCoeff, fullPathData: dataWithLengths, pathData: dataWithLengths.map(resetPath)})
+    const {loopEvery} = this.props;
+    const {disableAnimation, data}: {disableAnimation: boolean, data: PathData[]} = this.props;
+    if (!disableAnimation) {
+      this.setState({currentTime: 0, arrowTruncatedPaths: data.map(x => ({...x, waypoints: []}))});
       this.animate()
+    } else {
+      this.setState({currentTime: loopEvery, arrowTruncatedPaths: data.map(truncateWaypoints(loopEvery))})
     }
   }
 
   animate() {
-    let {coeff, fullPathData} = this.state
-    const {speed, animateEvery} = this.props;
-	  const animationInterval = setInterval(()=> {
-      coeff += speed;
-
-      if (coeff >= 1.0) {
-        clearInterval(animationInterval)
-        setTimeout(() => {
-          this.setState({
-            coeff: initialCoeff,
-            pathData: fullPathData.map(resetPath)
-          })
-          this.animate()
-        }, animateEvery || 3000)
-      }
-
-      const newPathData = fullPathData.map((path: PathData) => slicePath(path, coeff))
-
+    const {loopEvery} = this.props;
+    const {currentTime} = this.state;
+    if (currentTime > loopEvery) {
       this.setState({
-        coeff,
-        pathData: newPathData
+        currentTime: 0
       })
-    }, 30);
+    } else {
+      this.setState({
+        currentTime: currentTime + FRAME_INTERVAL
+      })
+    }
+
+    requestAnimationFrame(() => this.animate())
   }
 
   renderLayers() {
-    const {getEnd, getPath, getColor, getWidth, getRotation} = this.props
-    const {pathData} = this.state;
+    const {data, getEnd, getRotation, getPath, getColor, getWidth, getTimestamps, trailLength, opacity} = this.props
+    const {currentTime, arrowTruncatedPaths} = this.state;
 
     return [
       new ArrowLayer(this.getSubLayerProps({
         id: "arrow",
-        data: pathData,
+        data: arrowTruncatedPaths,
         getEnd,
         getColor,
         getWidth,
-        getRotation,
-        updateTriggers: {
-          getEnd: [pathData],
-          getColor: [pathData],
-          getWidth: [pathData],
-          getRotation: [pathData]
-        }
+        getRotation
       })),
-      new PathLayer(this.getSubLayerProps({
+      new TripsLayer(this.getSubLayerProps({
         id: "path",
-        data: pathData,
+        data,
         getPath,
         getColor,
         getWidth,
+        getTimestamps,
+        currentTime,
+        trailLength,
+        opacity,
         updateTriggers: {
-          getPath: [pathData]
+          getPath: [data],
         }
       }))
     ];
